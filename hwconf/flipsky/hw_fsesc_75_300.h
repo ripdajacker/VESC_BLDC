@@ -38,6 +38,22 @@
 // The fsesc 75 300 has LOW SIDE SHUNTS. With filters that must be disabled.
 // #define HW_HAS_PHASE_SHUNTS 
 
+
+
+// (jaykup) HW properties
+#define HW_HAS_LUNA_SERIAL_DISPLAY
+#define HW_HAS_BRAKE_SENSOR
+
+#ifdef HW_HAS_WHEEL_SPEED_SENSOR
+#define HW_SPEED_SENSOR_PORT	GPIOC
+#define HW_SPEED_SENSOR_PIN		11 //Use RX2 from UART2 connector
+#endif
+
+#ifdef HW_HAS_BRAKE_SENSOR
+#define HW_BRAKE_SENSOR_PORT	GPIOC
+#define HW_BRAKE_SENSOR_PIN		5 // Use ADC15
+#endif
+
 // Macros
 #define LED_GREEN_GPIO			GPIOB
 #define LED_GREEN_PIN			5
