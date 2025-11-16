@@ -31,6 +31,9 @@
 #include <string.h>
 #include "comm_can.h"
 #include "datatypes.h"
+#include "stdio.h"
+
+
 
 #define CMD_READ			0x11
 #define CMD_WRITE			0x16
@@ -163,6 +166,10 @@ void luna_display_serial_start(int8_t initial_level) {
 			PAL_STM32_PUDR_PULLUP);
     
 	display_uart_is_running = true;
+	unsigned char buffer[32];
+	uint8_t lenght = sprintf(buffer, "Bafang Serial Display\r\n");
+	sdWrite(&HW_UART_DEV, buffer, lenght);
+
 }
 
 static LUNA_PAS_LEVEL translate_assist_level(int8_t level) {
@@ -230,17 +237,9 @@ static void set_assist_level(uint8_t assist_code) {
 		default: return;
 	}
 
-	if( hw_bbshd_has_fixed_throttle_level() ) {
-		mcconf->l_current_max_scale = 1.0;
-		app_pas_set_current_sub_scaling(current_scale);
-	} else {
-		mcconf->l_current_max_scale = current_scale;
-	}
 
-	// In level 0, both PAS and throttle should be disabled
-	if(current_scale == 0.0) {
-		mcconf->l_current_max_scale = current_scale;
-	}
+		app_pas_set_current_sub_scaling(current_scale);
+
 }
 
 static uint8_t checksum(uint8_t *buf, uint8_t len) {
@@ -252,6 +251,7 @@ static uint8_t checksum(uint8_t *buf, uint8_t len) {
 }
 
 static void serial_send_packet(unsigned char *data, unsigned int len) {
+
 	if (display_uart_is_running) {
 		sdWrite(&HW_UART_DEV, data, len);
 	}
@@ -419,7 +419,6 @@ static void serial_display_byte_process(unsigned char byte) {
 					// rpm = spd [m/s] / perim [m] * 60[s/min]
 					const volatile mc_configuration *conf = mc_interface_get_configuration();
 					uint16_t wheel_rpm = (uint16_t)(mc_interface_get_speed() / (M_PI * conf->si_wheel_diameter) * 60.0);
-
 					serial_buffer.tx[0] = (uint8_t)(wheel_rpm / 256);
 					serial_buffer.tx[1] = (uint8_t)(wheel_rpm & 0xFFFF);
 					serial_buffer.tx[2] = serial_buffer.tx[0] + serial_buffer.tx[1] + 32;
@@ -506,7 +505,13 @@ static void serial_display_check_rx(void){
 			if (res != MSG_TIMEOUT) {
 				serial_display_byte_process(res);
 				rx = true;
+//				unsigned char buffer[32];
+//				buffer[0]=(unsigned char)res;
+//				sdWrite(&HW_UART_DEV, buffer, 1);
+
+
 			}
+
 		}
 	}
 }
@@ -528,6 +533,14 @@ static THD_FUNCTION(display_process_thread, arg) {
 		chEvtWaitAnyTimeout(ALL_EVENTS, ST2MS(100));
 		serial_display_check_rx();
 		set_assist_level(pas_level); //assert periodically to make sure changes are commited when a new motor config is written
+//		unsigned char buffer[32];
+//		uint8_t lenght = sprintf(buffer, "%d, %d, %d, %d\r\n",
+//				(int)app_pas_get_pedal_rpm(),
+//				(int)(app_pas_get_current_target_rel()*1000),
+//				(int)(app_adc_get_decoded_level()*1000),
+//				(int)(app_adc_get_decoded_level2()*1000));
+//		sdWrite(&HW_UART_DEV, buffer, lenght);
+
 	}
 }
 #endif

@@ -414,17 +414,17 @@ static THD_FUNCTION(adc_thread, arg) {
 		case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_BUTTON:
 		case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_ADC:
 		case ADC_CTRL_TYPE_CURRENT_REV_BUTTON_BRAKE_ADC:
-			current_mode = true;
-			if (pwr >= 0.0) {
-				// if pedal assist (PAS) thread is running, use the highest current command
-				if (app_pas_is_running()) {
-					pwr = utils_max_abs(pwr, app_pas_get_current_target_rel());
-				}
-				current_rel = pwr;
-			} else {
-				current_rel = fabsf(pwr);
-				current_mode_brake = true;
-			}
+//			current_mode = true;
+//			if (pwr >= 0.0) {
+//				// if pedal assist (PAS) thread is running, use the highest current command
+//				if (app_pas_is_running()) {
+//					pwr = utils_max_abs(pwr, app_pas_get_current_target_rel());
+//				}
+//				current_rel = pwr;
+//			} else {
+//				current_rel = fabsf(pwr);
+//				current_mode_brake = true;
+//			}
 
 			if (pwr < 0.001) {
 				ms_without_power += (1000.0 * (float)sleep_time) / (float)CH_CFG_ST_FREQUENCY;
@@ -570,7 +570,14 @@ static THD_FUNCTION(adc_thread, arg) {
 				}
 			}
 		}
-
+		current_mode = true;
+		if (pwr >= 0.0) {
+			// if pedal assist (PAS) thread is running, use the highest current command
+			if (app_pas_is_running()) {
+				pwr = utils_max_abs(pwr, app_pas_get_current_target_rel());
+			}
+			current_rel = pwr;
+		}
 		if (current_mode) {
 			if (current_mode_brake) {
 				mc_interface_set_brake_current_rel(current_rel);
@@ -629,8 +636,8 @@ static THD_FUNCTION(adc_thread, arg) {
 						current_out = utils_map(diff, 0.0, config.tc_max_diff, current_rel, 0.0);
 					}
 				}
-
-				if (is_reverse) {
+				if(!palReadPad(HW_BRAKE_SENSOR_PORT, HW_BRAKE_SENSOR_PIN))mc_interface_set_current_rel(0.0); //stop motor if brake lever is pulled
+				else if (is_reverse) {
 					mc_interface_set_current_rel(-current_out);
 				} else {
 					mc_interface_set_current_rel(current_out);

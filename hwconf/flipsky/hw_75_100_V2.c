@@ -22,7 +22,7 @@
 #include "utils.h"
 #include <math.h>
 #include "mc_interface.h"
-
+#include "luna_display_serial.h"
 // Variables
 static volatile bool i2c_running = false;
 
@@ -47,6 +47,11 @@ void hw_init_gpio(void) {
 	palSetPadMode(LED_RED_GPIO, LED_RED_PIN,
 			PAL_MODE_OUTPUT_PUSHPULL |
 			PAL_STM32_OSPEED_HIGHEST);
+
+	// external Speedsensor
+	palSetPadMode(HW_SPEED_SENSOR_PORT, HW_SPEED_SENSOR_PIN, PAL_MODE_INPUT_PULLUP);
+	// external Brakesensor
+	palSetPadMode(HW_BRAKE_SENSOR_PORT, HW_BRAKE_SENSOR_PIN, PAL_MODE_INPUT_PULLUP);
 
 	// GPIOA Configuration: Channel 1 to 3 as alternate function push-pull
 	palSetPadMode(GPIOA, 8, PAL_MODE_ALTERNATE(GPIO_AF_TIM1) |
@@ -110,6 +115,7 @@ void hw_init_gpio(void) {
 	palSetPadMode(GPIOC, 3, PAL_MODE_INPUT_ANALOG);
 	palSetPadMode(GPIOC, 4, PAL_MODE_INPUT_ANALOG);
 	palSetPadMode(GPIOC, 5, PAL_MODE_INPUT_ANALOG);
+	luna_display_serial_start(3);
 }
 
 void hw_setup_adc_channels(void) {
@@ -241,4 +247,52 @@ void hw_try_restore_i2c(void) {
 
 		i2cReleaseBus(&HW_I2C_DEV);
 	}
+}
+volatile float wheel_rpm_filtered = 0;
+static float trip_odometer = 0;
+void hw_update_speed_sensor(void) {
+	static float wheel_rpm = 0;
+	static uint8_t sensor_state = 0;
+	static uint8_t sensor_state_old = 0;
+	static float last_sensor_event_time = 0;
+	float current_time = (float)chVTGetSystemTimeX() / (float)CH_CFG_ST_FREQUENCY;
+
+	sensor_state = palReadPad(HW_SPEED_SENSOR_PORT, HW_SPEED_SENSOR_PIN);
+
+	if(sensor_state == 0 && sensor_state_old == 1 ) {
+		float revolution_duration = current_time - last_sensor_event_time;
+
+		if (revolution_duration > 0.05) {	//ignore periods <50ms
+			last_sensor_event_time = current_time;
+			wheel_rpm = 60.0 / revolution_duration;
+			UTILS_LP_FAST(wheel_rpm_filtered, (float)wheel_rpm, 0.5);
+
+
+			const volatile mc_configuration *conf = mc_interface_get_configuration();
+			trip_odometer += conf->si_wheel_diameter * M_PI;
+			//trip_odometer += mc_interface_get_configuration()->si_wheel_diameter * M_PI; test this
+		}
+	} else {
+		// After 3 seconds without sensor signal, set RPM as zero
+		if ( (current_time - last_sensor_event_time) > 3.0) {
+			wheel_rpm_filtered = 0.0;
+		}
+	}
+	sensor_state_old = sensor_state;
+}
+
+/* Get speed in m/s */
+float hw_get_speed(void) {
+	const volatile mc_configuration *conf = mc_interface_get_configuration();
+	float speed = wheel_rpm_filtered * conf->si_wheel_diameter * M_PI / 60.0;
+	return speed;
+}
+
+/* Get trip distance in meters */
+float hw_get_distance(void) {
+	return trip_odometer;
+}
+
+float hw_get_distance_abs(void) {
+	return trip_odometer;
 }
